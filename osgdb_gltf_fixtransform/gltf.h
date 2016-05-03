@@ -172,6 +172,12 @@ namespace gltf {
 			std::vector<tinygltf::AnimationChannel>::const_iterator itAnimChannel, 
 			std::map<std::string, tinygltf::Animations>::const_iterator itAnimation, 
 			std::map<std::string, std::string> &accessorName) const;
+
+		bool LoadShader(const tinygltf::Scene scene, std::string basePath, osg::StateSet *ss, 
+			std::string vertexShaderName, std::string fragmentShaderName) const;
+
+		bool getShaderNamebyPrimitives(const tinygltf::Scene &scene, vector<Primitive>::const_iterator itPrimitive, 
+			string &vertexShaderName, string &fragmentShaderName) const;
 	};
 	REGISTER_OSGPLUGIN(gltf, ReaderWriterGLTF)
 }

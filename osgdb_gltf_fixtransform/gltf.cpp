@@ -603,8 +603,8 @@ bool ReaderWriterGLTF::TypeofPrimitives(const Scene &scene, const tinygltf::Acce
 	return true;
 }
 
-bool getShaderNamebyPrimitives(const tinygltf::Scene &scene, std::vector<tinygltf::Primitive>::const_iterator itPrimitive, 
-							   std::string &vertexShaderName, std::string &fragmentShaderName){
+bool ReaderWriterGLTF::getShaderNamebyPrimitives(const tinygltf::Scene &scene, std::vector<tinygltf::Primitive>::const_iterator itPrimitive, 
+							   std::string &vertexShaderName, std::string &fragmentShaderName) const{
 	map<string, tinygltf::Material>::const_iterator it;
 	it = scene.materials.find(itPrimitive->material);
 	if(it == scene.materials.end()){
@@ -628,8 +628,8 @@ bool getShaderNamebyPrimitives(const tinygltf::Scene &scene, std::vector<tinyglt
 
 	return true;
 }
-bool LoadShader(const tinygltf::Scene scene, std::string basePath, osg::StateSet *ss, 
-					std::string vertexShaderName, std::string fragmentShaderName){
+bool ReaderWriterGLTF::LoadShader(const tinygltf::Scene scene, std::string basePath, osg::StateSet *ss, 
+					std::string vertexShaderName, std::string fragmentShaderName) const{
 	std::string vsPath = basePath + "\\";
 	std::string fsPath = basePath + "\\";
 
@@ -675,10 +675,10 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 		std::vector<tinygltf::Primitive>::const_iterator itPrimitive, string &err) const{
 	osg::Geometry *geometry = new osg::Geometry;
 	//load shader
-	/*std::string vertexShaderName, fragmentShaderName;
-	getShaderNamebyPrimitives(scene, itPrimitive, vertexShaderName, fragmentShaderName);
-	osg::StateSet *ss = geometry->getOrCreateStateSet();
-	LoadShader(scene, basePath, ss, vertexShaderName, fragmentShaderName);*/
+	//std::string vertexShaderName, fragmentShaderName;
+	//getShaderNamebyPrimitives(scene, itPrimitive, vertexShaderName, fragmentShaderName);
+	//osg::StateSet *ss = geometry->getOrCreateStateSet();
+	//LoadShader(scene, basePath, ss, vertexShaderName, fragmentShaderName);
 
 	std::map<std::string, std::string>::const_iterator itAttr = itPrimitive->attributes.begin();
 	std::map<std::string, std::string>::const_iterator itAttrEnd = itPrimitive->attributes.end();
@@ -705,6 +705,7 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 		}
 
 		geometry->setNormalArray(normals.get());
+		geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
 	}
 
 	it = itPrimitive->attributes.find("TEXCOORD_0");
@@ -722,7 +723,6 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 			texcoordsTmp->push_back(texcoordsValue);
 		}
 
-		geometry->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
 		geometry->setTexCoordArray(0, texcoordsTmp.get());//设置纹理坐标信息
 	}
 
@@ -751,6 +751,13 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 	if(!TypeofPrimitives(scene, accessor, geometry, itPrimitive, err)){
 		err += "Not correct primitives mode\n";
 	}
+
+	//geometry->setVertexAttribArray(0, normals);
+	//geometry->setVertexAttribBinding(0, osg::Geometry::BIND_PER_VERTEX);
+	//geometry->setVertexAttribArray(1, vertices);
+	//geometry->setVertexAttribBinding(1, osg::Geometry::BIND_PER_VERTEX);
+	//geometry->setVertexAttribArray();
+	//geometry->setVertexAttribBinding();
 
 	return geometry;
 }
@@ -1032,16 +1039,16 @@ bool ReaderWriterGLTF::getAccessorNamefromChannel(
 
 bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group, 
 		const tinygltf::Scene &scene, string &err) const{
-	osgAnimation::BasicAnimationManager* manager = new osgAnimation::BasicAnimationManager;
-	group->setUpdateCallback(manager);
-
 	std::map<std::string, tinygltf::Animations>::const_iterator itAnimation =
 		scene.animation.begin();
 	std::map<std::string, tinygltf::Animations>::const_iterator itAnimationEnd =
 		scene.animation.end();
 
 	//traverse all animation
-	for(; itAnimation != itAnimationEnd; itAnimation++){
+//	for(; itAnimation != itAnimationEnd; itAnimation++){
+		osgAnimation::BasicAnimationManager* manager = new osgAnimation::BasicAnimationManager;
+		group->addUpdateCallback(manager);
+
 		std::vector<tinygltf::AnimationChannel>::const_iterator itAnimChannel = 
 			itAnimation->second.channels.begin();
 		std::vector<tinygltf::AnimationChannel>::const_iterator itAnimChannelEnd = 
@@ -1174,7 +1181,7 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 		manager->registerAnimation(animation.get());
 		//play animation
 		manager->playAnimation(animation.get());
-	}//end of animation
+//	}//end of animation
 
 	return true;
 }
@@ -1254,8 +1261,9 @@ ReaderWriterGLTF::ReadResult ReaderWriterGLTF::readNode(const string &file,
 
 int main(){
 	ref_ptr<osgViewer::Viewer> viewer = new osgViewer::Viewer;
-	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\2_cylinder_engine\\glTF\\2_cylinder_engine.gltf"));
+	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\2_cylinder_engine\\glTF\\2_cylinder_engine.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\CesiumMilkTruck\\glTF\\CesiumMilkTruck.gltf"));
+	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\boxAnimated\\glTF\\glTF.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\buggy\\glTF\\buggy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\gearbox_assy\\glTF\\gearbox_assy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\Reciprocating_Saw\\glTF\\Reciprocating_Saw.gltf"));
