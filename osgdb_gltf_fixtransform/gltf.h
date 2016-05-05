@@ -78,6 +78,31 @@ namespace gltf {
 			short dataShort;
 			unsigned short dataUnsignedShort;
 		}dataType_t;
+		
+		typedef union techparaType{
+			byte dataByte;
+			//unsigned byte
+			short dataShort;
+			unsigned short dataUnsignedShort;
+			int dataInt;
+			unsigned int dataUnsignedInt;
+			float dataFloat;
+			float dataFloatVec2[2];
+			float dataFloatVec3[3];
+			float dataFloatVec4[4];
+			int dataIntVec2[2];
+			int dataIntVec3[3];
+			int dataIntVec4[4];
+			bool dataBool;
+			bool dataBoolVec2[2];
+			bool dataBoolVec3[3];
+			bool dataBoolVec4[4];
+			float dataFloatMat2[4];
+			float dataFloatMat3[9];
+			float dataFloatMat4[16];
+			//sampler_2d
+		}techparaType_t;
+
 	public:
 		ReaderWriterGLTF();
 		virtual const char *className() const;
@@ -178,6 +203,8 @@ namespace gltf {
 
 		bool getShaderNamebyPrimitives(const tinygltf::Scene &scene, vector<Primitive>::const_iterator itPrimitive, 
 			string &vertexShaderName, string &fragmentShaderName) const;
+
+		void addShaderUniform(osg::StateSet *ss, const tinygltf::Scene scene) const;
 	};
 	REGISTER_OSGPLUGIN(gltf, ReaderWriterGLTF)
 }

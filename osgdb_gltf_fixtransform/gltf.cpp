@@ -628,14 +628,28 @@ bool ReaderWriterGLTF::getShaderNamebyPrimitives(const tinygltf::Scene &scene, s
 
 	return true;
 }
+
+void ReaderWriterGLTF::addShaderUniform(osg::StateSet *ss, const tinygltf::Scene scene) const{
+	std::map<string, Techniques>::const_iterator itScene = scene.technique.begin();
+	for(; itScene != scene.technique.end(); itScene++){
+		std::map<string, string>::const_iterator itUniform = itScene->second.uniforms.begin();
+		for(; itUniform!=itScene->second.uniforms.end(); itUniform++){
+			ss->addUniform(new osg::Uniform(itUniform->first.c_str(), 0));
+		}
+
+	}
+
+}
+
+
 bool ReaderWriterGLTF::LoadShader(const tinygltf::Scene scene, std::string basePath, osg::StateSet *ss, 
 					std::string vertexShaderName, std::string fragmentShaderName) const{
 	std::string vsPath = basePath + "\\";
 	std::string fsPath = basePath + "\\";
 
 	osg::ref_ptr<osg::Program> programObject = new osg::Program;
-	osg::Shader *vertexObject = new osg::Shader(osg::Shader::VERTEX);
-	osg::Shader *fragmentObject = new osg::Shader(osg::Shader::FRAGMENT);
+	osg::ref_ptr<osg::Shader> vertexObject = new osg::Shader(osg::Shader::VERTEX);
+	osg::ref_ptr<osg::Shader> fragmentObject = new osg::Shader(osg::Shader::FRAGMENT);
 
 	map<string, tinygltf::Shaders>::const_iterator it;
 	it = scene.shaders.find(vertexShaderName);
@@ -649,7 +663,7 @@ bool ReaderWriterGLTF::LoadShader(const tinygltf::Scene scene, std::string baseP
 		std::cout << "Could not load file: " << vsPath << std::endl;
 		return false;
 	}
-	programObject->addShader(vertexObject);
+	programObject->addShader(vertexObject.get());
 
 	it = scene.shaders.find(fragmentShaderName);
 	if(it == scene.shaders.end()){
@@ -662,11 +676,13 @@ bool ReaderWriterGLTF::LoadShader(const tinygltf::Scene scene, std::string baseP
 		std::cout << "Could not load file: " << fsPath << std::endl;
 		return false;
 	}
-	programObject->addShader(fragmentObject);
+	programObject->addShader(fragmentObject.get());
 
 	if(ss){
 		ss->setAttributeAndModes(programObject.get(), osg::StateAttribute::ON);
 	}
+
+	addShaderUniform(ss, scene);
 
 	return true;
 }
@@ -752,13 +768,6 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 		err += "Not correct primitives mode\n";
 	}
 
-	//geometry->setVertexAttribArray(0, normals);
-	//geometry->setVertexAttribBinding(0, osg::Geometry::BIND_PER_VERTEX);
-	//geometry->setVertexAttribArray(1, vertices);
-	//geometry->setVertexAttribBinding(1, osg::Geometry::BIND_PER_VERTEX);
-	//geometry->setVertexAttribArray();
-	//geometry->setVertexAttribBinding();
-
 	return geometry;
 }
 
@@ -838,8 +847,8 @@ bool ReaderWriterGLTF::getGeode(const std::string meshName, const tinygltf::Scen
 		buildMaterialToStateSetMap(scene, itPrimitive->material, materialToStateSetMap);
 
 		//convert every primitives to geometry object 
-		osg::Geometry* geometry = convertElementListToGeometry(scene, basePath, itPrimitive, err);
-		osg::StateSet *stateSet = materialToStateSetMap[itPrimitive->material].get();
+		osg::ref_ptr<osg::Geometry> geometry = convertElementListToGeometry(scene, basePath, itPrimitive, err);
+		osg::ref_ptr<osg::StateSet> stateSet = materialToStateSetMap[itPrimitive->material].get();
 		geometry->setStateSet(stateSet);
 
 		//add texture
@@ -855,7 +864,7 @@ bool ReaderWriterGLTF::addGeodeToTransform(const itNode_t itNode, const Scene &s
 		const string basePath, osg::ref_ptr<osg::MatrixTransform> transform, string &err) const{
 	osg::Matrix matrix;
 
-	osg::Geode *geode= new osg::Geode;
+	osg::ref_ptr<osg::Geode> geode= new osg::Geode;
 	std::vector<std::string>::const_iterator itmesh = itNode->second.meshes.begin();
 	std::vector<std::string>::const_iterator itmeshEnd = itNode->second.meshes.end();
 
@@ -864,7 +873,7 @@ bool ReaderWriterGLTF::addGeodeToTransform(const itNode_t itNode, const Scene &s
 			err += "Failed to get geode\n";
 		}
 	}
-
+	//this scene do not have animation
 	if(scene.animation.size() == 0){
 		//if node has matrix
 		if(itNode->second.matrix.size() != 0){
@@ -896,7 +905,6 @@ bool ReaderWriterGLTF::addGeodeToTransform(const itNode_t itNode, const Scene &s
 
 		//transform->setName(itNode->first);
 		transform->setMatrix(matrix);
-
 	}else{
 		osg::ref_ptr<osgAnimation::UpdateMatrixTransform> update = new osgAnimation::UpdateMatrixTransform(itNode->first);					
 		//if node has translation
@@ -1045,7 +1053,7 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 		scene.animation.end();
 
 	//traverse all animation
-//	for(; itAnimation != itAnimationEnd; itAnimation++){
+	for(; itAnimation != itAnimationEnd; itAnimation++){
 		osgAnimation::BasicAnimationManager* manager = new osgAnimation::BasicAnimationManager;
 		group->addUpdateCallback(manager);
 
@@ -1060,10 +1068,7 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 		//one animation has several channels, but the channels' target ID is same. 
 		//when we create updater, the updater's name is same. we only need to push 
 		//defferent transform.
-		std::string targetNodeName = itAnimChannel->target.id;
-		osg::ref_ptr<osgAnimation::UpdateMatrixTransform> updater = new
-			osgAnimation::UpdateMatrixTransform(targetNodeName);
-
+		//std::string targetNodeName = itAnimChannel->target.id;
 
 		//traverse all chinnal in animation
 		for(; itAnimChannel != itAnimChannelEnd; itAnimChannel++){
@@ -1088,19 +1093,13 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 				if(itAnimSample->second.interpolation == "LINEAR"){
 					//the output is rotation
 					if(itAnimSample->second.output == "rotation"){
-						//connectUpdaterToNode();
-						//create channel, the channel connect updater through name,
-						//channel's targetName = updater's name
-						//channel's name = updater's transform
-						osg::ref_ptr<osgAnimation::QuatSphericalLinearChannel> channel = 
-							new osgAnimation::QuatSphericalLinearChannel;
-						channel->setName(itAnimChannel->target.path);
-						channel->setTargetName(itAnimChannel->target.id);
-
-						//create container from channel
-						osgAnimation::QuatKeyframeContainer *container = 
-							channel->getOrCreateSampler()->getOrCreateKeyframeContainer();
-
+						osg::ref_ptr<osgAnimation::QuatKeyframeContainer> rotKey = new osgAnimation::QuatKeyframeContainer;
+						osg::ref_ptr<osgAnimation::QuatSphericalLinearSampler> rotSampler = new osgAnimation::QuatSphericalLinearSampler;
+						osg::ref_ptr<osgAnimation::QuatSphericalLinearChannel> rotChannel = new osgAnimation::QuatSphericalLinearChannel(rotSampler.get());
+						rotSampler->setKeyframeContainer(rotKey.get());
+						rotChannel->setName(itAnimChannel->target.path);
+						rotChannel->setTargetName(itAnimChannel->target.id);
+						animation->addChannel(rotChannel.get());
 						//get buffer
 						std::vector<float> input;
 						osg::ref_ptr<osg::Vec4Array> output = new osg::Vec4Array;
@@ -1108,67 +1107,87 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 							if(itSamplersToAccessorName->first == "input"){
 								getContextAccessor(scene, itSamplersToAccessorName->second, input, err);
 							}
-
+						
 							if(itSamplersToAccessorName->first == "output"){
 								getContextAccessor(scene, itSamplersToAccessorName->second, output, err);
 							}
 						}
-
+						
 						//push keyframe to container
 						float inputScalar;
 						osg::Vec4 outputVec4;
 						for(size_t i = 0; i < accessor.count; i++){
 							inputScalar = input[i];
 							outputVec4 = (*output)[i];
-							container->push_back(osgAnimation::QuatKeyframe(inputScalar, outputVec4));
+							rotKey->push_back(osgAnimation::QuatKeyframe(inputScalar, outputVec4));
 						}
-
-						//add channel to animation
-						animation->addChannel(channel.get());
-						//set updater, push transform to updater.
-						updater->getStackedTransforms().push_back(
-							new osgAnimation::StackedQuaternionElement(itAnimChannel->target.path));
+						////create channel, the channel connect updater through name,
+						////channel's targetName = updater's name
+						////channel's name = updater's transform
+						//osg::ref_ptr<osgAnimation::QuatSphericalLinearChannel> channel = 
+						//	new osgAnimation::QuatSphericalLinearChannel;
+						//channel->setName(itAnimChannel->target.path);
+						//channel->setTargetName(itAnimChannel->target.id);
+						//
+						////create container from channel
+						//osgAnimation::QuatKeyframeContainer *container = 
+						//	channel->getOrCreateSampler()->getOrCreateKeyframeContainer();
+						//
+						////get buffer
+						//std::vector<float> input;
+						//osg::ref_ptr<osg::Vec4Array> output = new osg::Vec4Array;
+						//for(; itSamplersToAccessorName != itSamplersToAccessorNameEnd; itSamplersToAccessorName++){
+						//	if(itSamplersToAccessorName->first == "input"){
+						//		getContextAccessor(scene, itSamplersToAccessorName->second, input, err);
+						//	}
+						//
+						//	if(itSamplersToAccessorName->first == "output"){
+						//		getContextAccessor(scene, itSamplersToAccessorName->second, output, err);
+						//	}
+						//}
+						//
+						////push keyframe to container
+						//float inputScalar;
+						//osg::Vec4 outputVec4;
+						//for(size_t i = 0; i < accessor.count; i++){
+						//	inputScalar = input[i];
+						//	outputVec4 = (*output)[i];
+						//	container->push_back(osgAnimation::QuatKeyframe(inputScalar, outputVec4));
+						//}
+						//
+						////add channel to animation
+						//animation->addChannel(channel);
 					}
 					//the output is translation or scale
 					else {
-						osgAnimation::Vec3KeyframeContainer* keys0 = new osgAnimation::Vec3KeyframeContainer;
-
-						std::map<std::string, std::string> accessorName;
-						getAccessorNamefromChannel(itAnimChannel, itAnimation, accessorName);
-
-						std::map<std::string, std::string>::const_iterator itSamplersToAccessorName = 
-							accessorName.begin();
-						std::map<std::string, std::string>::const_iterator itSamplersToAccessorNameEnd = 
-							accessorName.end();
-
-						tinygltf::Accessor accessor;
+						osg::ref_ptr<osgAnimation::Vec3KeyframeContainer> Key = new osgAnimation::Vec3KeyframeContainer;
+						osg::ref_ptr<osgAnimation::Vec3LinearSampler> Sampler = new osgAnimation::Vec3LinearSampler;
+						osg::ref_ptr<osgAnimation::Vec3LinearChannel> Channel = new osgAnimation::Vec3LinearChannel(Sampler.get());
+						Sampler->setKeyframeContainer(Key.get());
+						Channel->setName(itAnimChannel->target.path);
+						Channel->setTargetName(itAnimChannel->target.id);
+						animation->addChannel(Channel.get());
+						//get buffer
 						std::vector<float> input;
 						osg::ref_ptr<osg::Vec3Array> output = new osg::Vec3Array;
 						for(; itSamplersToAccessorName != itSamplersToAccessorNameEnd; itSamplersToAccessorName++){
-							getContextAccessor(scene, itSamplersToAccessorName->second, accessor, err);
-
 							if(itSamplersToAccessorName->first == "input"){
 								getContextAccessor(scene, itSamplersToAccessorName->second, input, err);
 							}
-
+						
 							if(itSamplersToAccessorName->first == "output"){
 								getContextAccessor(scene, itSamplersToAccessorName->second, output, err);
 							}
 						}
-
+						
+						//push keyframe to container
+						float time;
+						osg::Vec3 outputVec3;
 						for(size_t i = 0; i < accessor.count; i++){
-							osg::Vec3 outputVec3 =  (*output)[i];
-							float time = input[i];
-							keys0->push_back(osgAnimation::Vec3Keyframe(time,outputVec3));
+							time = input[i];
+							outputVec3 = (*output)[i];
+							Key->push_back(osgAnimation::Vec3Keyframe(time, outputVec3));
 						}
-
-						osgAnimation::Vec3LinearSampler* sampler = new osgAnimation::Vec3LinearSampler;
-						sampler->setKeyframeContainer(keys0);
-						osgAnimation::Vec3LinearChannel* channel = new osgAnimation::Vec3LinearChannel(sampler);
-						channel->setName(itAnimChannel->target.path);
-						channel->setTargetName(itAnimChannel->target.id);
-						animation->addChannel(channel);
-
 					}
 				}
 				//the interpolation is not "LINEAR"
@@ -1181,7 +1200,7 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 		manager->registerAnimation(animation.get());
 		//play animation
 		manager->playAnimation(animation.get());
-//	}//end of animation
+	}//end of animation
 
 	return true;
 }
@@ -1250,7 +1269,7 @@ ReaderWriterGLTF::ReadResult ReaderWriterGLTF::readNode(const string &file,
 	string ERR;
 	string basePath = GetBaseDir(file);
 	cout << basePath << endl;
-	osg::Node *node = convertModelToSceneGraph(scene, basePath, ERR);
+	osg::ref_ptr<osg::Node> node = convertModelToSceneGraph(scene, basePath, ERR);
 
 	if(!ERR.empty()){
 		cout << "Err: " << ERR.c_str() << endl;
@@ -1262,10 +1281,13 @@ ReaderWriterGLTF::ReadResult ReaderWriterGLTF::readNode(const string &file,
 int main(){
 	ref_ptr<osgViewer::Viewer> viewer = new osgViewer::Viewer;
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\2_cylinder_engine\\glTF\\2_cylinder_engine.gltf"));
-	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\CesiumMilkTruck\\glTF\\CesiumMilkTruck.gltf"));
-	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\boxAnimated\\glTF\\glTF.gltf"));
+	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\CesiumMilkTruck\\glTF\\CesiumMilkTruck.gltf"));
+	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\boxAnimated\\glTF\\glTF.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\buggy\\glTF\\buggy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\gearbox_assy\\glTF\\gearbox_assy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\Reciprocating_Saw\\glTF\\Reciprocating_Saw.gltf"));
+
+	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\new\\monkey\\monkey.gltf"));
+	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\new\\Test_Ball_Hard\\Test_Ball_Hard.gltf"));
 	return viewer->run();
 }
