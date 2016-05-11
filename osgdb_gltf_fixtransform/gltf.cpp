@@ -755,7 +755,6 @@ osg::Geometry* ReaderWriterGLTF::convertElementListToGeometry(const tinygltf::Sc
 		if(!getContextAccessor(scene, it->second, weight, err)){
 			err += "Failed to get primitives attributes WEIGHT\n";
 		}
-		
 	}
 
 	tinygltf::Accessor accessor;
@@ -1045,18 +1044,45 @@ bool ReaderWriterGLTF::getAccessorNamefromChannel(
 	}
 }
 
+bool ReaderWriterGLTF::findAnimationEndTime(const tinygltf::Scene &scene, 
+											float &animationEndTime, string &err) const{
+	std::map<std::string, tinygltf::Animations>::const_iterator it = scene.animation.begin();
+	std::map<std::string, tinygltf::Animations>::const_iterator itEnd = scene.animation.end();
+	for(; it!=itEnd; it++){
+		std::vector<float> time;
+		if(!getContextAccessor(scene, it->second.parameters.TIME, time, err)){
+			err += "Failed to get animation time\n";
+			return false;
+		}
+
+		if(animationEndTime < *(time.end()-1)){
+			animationEndTime = *(time.end()-1);
+		}
+	}
+
+	return true;
+}
+
+
 bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group, 
 		const tinygltf::Scene &scene, string &err) const{
 	std::map<std::string, tinygltf::Animations>::const_iterator itAnimation =
 		scene.animation.begin();
 	std::map<std::string, tinygltf::Animations>::const_iterator itAnimationEnd =
 		scene.animation.end();
+	
+	// find the end time of animation
+	float animationEndTime = 0;
+	if(!findAnimationEndTime(scene, animationEndTime, err)){
+		err += "Failed to find animation end time\n";
+		return false;
+	}
 
+
+	osgAnimation::BasicAnimationManager* manager = new osgAnimation::BasicAnimationManager;
+	group->setUpdateCallback(manager);
 	//traverse all animation
 	for(; itAnimation != itAnimationEnd; itAnimation++){
-		osgAnimation::BasicAnimationManager* manager = new osgAnimation::BasicAnimationManager;
-		group->addUpdateCallback(manager);
-
 		std::vector<tinygltf::AnimationChannel>::const_iterator itAnimChannel = 
 			itAnimation->second.channels.begin();
 		std::vector<tinygltf::AnimationChannel>::const_iterator itAnimChannelEnd = 
@@ -1096,6 +1122,7 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 						osg::ref_ptr<osgAnimation::QuatKeyframeContainer> rotKey = new osgAnimation::QuatKeyframeContainer;
 						osg::ref_ptr<osgAnimation::QuatSphericalLinearSampler> rotSampler = new osgAnimation::QuatSphericalLinearSampler;
 						osg::ref_ptr<osgAnimation::QuatSphericalLinearChannel> rotChannel = new osgAnimation::QuatSphericalLinearChannel(rotSampler.get());
+						
 						rotSampler->setKeyframeContainer(rotKey.get());
 						rotChannel->setName(itAnimChannel->target.path);
 						rotChannel->setTargetName(itAnimChannel->target.id);
@@ -1114,13 +1141,18 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 						}
 						
 						//push keyframe to container
-						float inputScalar;
+						float time;
 						osg::Vec4 outputVec4;
+						//animation must start at 0
+						rotKey->push_back(osgAnimation::QuatKeyframe(0, (*output)[0]));
 						for(size_t i = 0; i < accessor.count; i++){
-							inputScalar = input[i];
+							time = input[i];
 							outputVec4 = (*output)[i];
-							rotKey->push_back(osgAnimation::QuatKeyframe(inputScalar, outputVec4));
+							rotKey->push_back(osgAnimation::QuatKeyframe(time, outputVec4));
 						}
+						//add the end time animation
+						rotKey->push_back(osgAnimation::QuatKeyframe(animationEndTime, outputVec4));
+
 						////create channel, the channel connect updater through name,
 						////channel's targetName = updater's name
 						////channel's name = updater's transform
@@ -1183,11 +1215,13 @@ bool ReaderWriterGLTF::createKeyframeAnimation(osg::Group *group,
 						//push keyframe to container
 						float time;
 						osg::Vec3 outputVec3;
+						Key->push_back(osgAnimation::Vec3Keyframe(0, (*output)[0]));
 						for(size_t i = 0; i < accessor.count; i++){
 							time = input[i];
 							outputVec3 = (*output)[i];
 							Key->push_back(osgAnimation::Vec3Keyframe(time, outputVec3));
 						}
+						Key->push_back(osgAnimation::Vec3Keyframe(animationEndTime, outputVec3));
 					}
 				}
 				//the interpolation is not "LINEAR"
@@ -1281,8 +1315,8 @@ ReaderWriterGLTF::ReadResult ReaderWriterGLTF::readNode(const string &file,
 int main(){
 	ref_ptr<osgViewer::Viewer> viewer = new osgViewer::Viewer;
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\2_cylinder_engine\\glTF\\2_cylinder_engine.gltf"));
-	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\CesiumMilkTruck\\glTF\\CesiumMilkTruck.gltf"));
-	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\boxAnimated\\glTF\\glTF.gltf"));
+	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\CesiumMilkTruck\\glTF\\CesiumMilkTruck.gltf"));
+	viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\boxAnimated\\glTF\\glTF.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\buggy\\glTF\\buggy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\gearbox_assy\\glTF\\gearbox_assy.gltf"));
 	//viewer->setSceneData(osgDB::readNodeFile("C:\\glTF\\sampleModels\\Reciprocating_Saw\\glTF\\Reciprocating_Saw.gltf"));

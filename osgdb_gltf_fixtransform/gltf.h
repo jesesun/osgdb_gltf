@@ -205,6 +205,10 @@ namespace gltf {
 			string &vertexShaderName, string &fragmentShaderName) const;
 
 		void addShaderUniform(osg::StateSet *ss, const tinygltf::Scene scene) const;
+
+		//find the end time of animation
+		bool ReaderWriterGLTF::findAnimationEndTime(const tinygltf::Scene &scene, 
+											float &animationEndTime, string &err) const;
 	};
 	REGISTER_OSGPLUGIN(gltf, ReaderWriterGLTF)
 }
